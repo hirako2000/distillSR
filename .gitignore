@@ -1,0 +1,56 @@
+# Python related clutter files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.ruff_cache
+.pytest_cache
+*$py.class
+.coverage
+coverage.json
+.benchmarks/
+/logs
+
+# models
+/weights
+/exports
+
+# data
+VGRP-Bench/
+/data/
+
+# Viz
+#visualizations
+
+# DVC local-only data and cache
+/data/raw/
+/data/processed/
+.dvc/cache/
+.dvc/tmp/
+data/labeled*
+
+# Local uv cache/settings
+.uv/
+
+# Potentially sensitive
+.env
+.environments
+.env.production
+.env.dev
+
+
+
+# Virtual environment
+.venv
+
+# OS
+.DS_Store
+
+# junk
+a.txt*
+junk/
+list.sh
+spit.sh
+all_*.txt

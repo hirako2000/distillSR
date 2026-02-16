@@ -1,0 +1,49 @@
+{
+  "timestamp": "2026-02-16T00:02:05.348918",
+  "model": "weights/4xNomos2_realplksr_dysample.pth",
+  "model_size_mb": 28.339374542236328,
+  "system": {
+    "python_version": "3.14.2",
+    "system": "Darwin",
+    "release": "24.5.0"
+  },
+  "images": [
+    {
+      "image": "1.png",
+      "total_time_ms": 4677.334834006615,
+      "inference_time_ms": 2500.0,
+      "output": "tests/images-output/1_sr.png"
+    },
+    {
+      "image": "250px-Kea.jpg",
+      "total_time_ms": 3767.568083014339,
+      "inference_time_ms": 2160.0,
+      "output": "tests/images-output/250px-Kea_sr.jpg"
+    },
+    {
+      "image": "900.jpeg",
+      "total_time_ms": 5665.404458006378,
+      "inference_time_ms": 4000.0,
+      "output": "tests/images-output/900_sr.jpeg"
+    },
+    {
+      "image": "bECR8un7_400x400.jpg",
+      "total_time_ms": 3818.8958339742385,
+      "inference_time_ms": 2170.0,
+      "output": "tests/images-output/bECR8un7_400x400_sr.jpg"
+    },
+    {
+      "image": "cat-1.jpg",
+      "total_time_ms": 3867.177542007994,
+      "inference_time_ms": 2220.0,
+      "output": "tests/images-output/cat-1_sr.jpg"
+    }
+  ],
+  "statistics": {
+    "mean_ms": 2610.0,
+    "median_ms": 2220.0,
+    "min_ms": 2160.0,
+    "max_ms": 4000.0,
+    "std_ms": 706.0311607854146
+  }
+}

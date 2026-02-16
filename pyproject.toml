@@ -1,0 +1,32 @@
+[project]
+name = "distilplksr"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "huggingface-hub>=1.4.1",
+    "lmdb>=1.7.5",
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.2",
+    "onnx>=1.20.1",
+    "onnxconverter-common>=1.16.0",
+    "onnxoptimizer>=0.4.2",
+    "onnxruntime>=1.24.1",
+    "onnxscript>=0.6.2",
+    "opencv-python>=4.13.0.92",
+    "pandas>=3.0.0",
+    "pillow>=12.1.1",
+    "pytest>=9.0.2",
+    "pytest-benchmark>=5.2.3",
+    "pytorch-msssim>=1.0.0",
+    "pyyaml>=6.0.3",
+    "requests>=2.32.5",
+    "rich>=14.3.2",
+    "scikit-image>=0.26.0",
+    "scipy>=1.17.0",
+    "torch>=2.10.0",
+    "torchvision>=0.25.0",
+    "tqdm>=4.67.3",
+    "typer>=0.23.1",
+]
