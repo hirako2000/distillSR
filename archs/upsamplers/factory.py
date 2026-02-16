@@ -2,7 +2,7 @@
 Upsampler factory for creating upsamplers by name
 """
 
-from ..base import get_upsampler
+from ..base import get_upsampler, register_upsampler
 
 
 def create_upsampler(name: str, *args, **kwargs):
@@ -18,3 +18,6 @@ def create_upsampler(name: str, *args, **kwargs):
         Upsampler module
     """
     return get_upsampler(name, *args, **kwargs)
+
+
+__all__ = ['create_upsampler', 'register_upsampler']
