@@ -71,6 +71,16 @@ train config="configs/train_config.yaml" resume="" pretrain="":
         uv run cli.py train {{config}}; \
     fi
 
+# Train with fast config file
+train-fast config="configs/train_fast_config.yaml" resume="" pretrain="":
+    @if [ -n "{{resume}}" ]; then \
+        uv run cli.py train {{config}} --resume {{resume}}; \
+    elif [ -n "{{pretrain}}" ]; then \
+        uv run cli.py train {{config}} --pretrain {{pretrain}}; \
+    else \
+        uv run cli.py train {{config}}; \
+    fi
+
 # Train with default config (quick test)
 train-default:
     uv run cli.py train-default
@@ -90,6 +100,17 @@ finetune pretrain config="configs/train_config.yaml":
 # Run inference on image
 infer model input output="" tile_size="512" device="":
     @if [ -n "{{output}}" ] && [ -n "{{device}}" ]; then \
+        uv run cli.py infer {{model}} {{input}} --output {{output}} --tile-size {{tile_size}} --device {{device}} --dysample; \
+    elif [ -n "{{output}}" ]; then \
+        uv run cli.py infer {{model}} {{input}} --output {{output}} --tile-size {{tile_size}} --dysample; \
+    elif [ -n "{{device}}" ]; then \
+        uv run cli.py infer {{model}} {{input}} --tile-size {{tile_size}} --device {{device}} --dysample; \
+    else \
+        uv run cli.py infer {{model}} {{input}} --tile-size {{tile_size}} --dysample; \
+    fi
+
+infer-pixel model input output="" tile_size="512" device="":
+    @if [ -n "{{output}}" ] && [ -n "{{device}}" ]; then \
         uv run cli.py infer {{model}} {{input}} --output {{output}} --tile-size {{tile_size}} --device {{device}}; \
     elif [ -n "{{output}}" ]; then \
         uv run cli.py infer {{model}} {{input}} --output {{output}} --tile-size {{tile_size}}; \
@@ -98,6 +119,7 @@ infer model input output="" tile_size="512" device="":
     else \
         uv run cli.py infer {{model}} {{input}} --tile-size {{tile_size}}; \
     fi
+
 # Run inference on directory
 infer-dir model input_dir output_dir="sr_output" tile_size="512":
     uv run cli.py infer --model {{model}} --input {{input_dir}} --output {{output_dir}} --tile-size {{tile_size}}
@@ -151,8 +173,45 @@ model-card model output_dir="exports" dataset="nomosv2" psnr="0" ssim="0":
     uv run cli.py export --model {{model}} --output-dir {{output_dir}} --dataset {{dataset}} --psnr {{psnr}} --ssim {{ssim}}
 
 # ============================================================================
-# Testing
+# Testing / Linting
 # ============================================================================
+
+# Run all checks
+check: lint analysis test
+
+# Fix all auto-fixable linting and formatting issues
+fix:
+    uv run ruff check --fix .
+
+# Check linting and formatting without fixing 
+lint:
+    uv run ruff check .
+
+# Run static type analysis
+analysis:
+    uv run pyright
+
+# Run tests with coverage
+test:
+    pytest tests/ \
+        --cov=. \
+        --cov-report=term-missing \
+        --cov-report=html:coverage_html \
+        --cov-report=xml:coverage.xml \
+        -v
+
+# Run tests with coverage and generate report
+test-coverage:
+    pytest tests/ \
+        --cov=. \
+        --cov-report=term-missing \
+        --cov-report=html:coverage_html \
+        --cov-report=xml:coverage.xml \
+        -v --cov-fail-under=80
+
+# Run specific test file
+test-file f:
+    pytest tests/test_{{f}}.py -v --cov=. --cov-append
 
 # Test degradation pipeline
 test-degradation:
@@ -198,7 +257,7 @@ clean all="false":
         uv run cli.py clean; \
     fi
 
-# Clean everything (including data and weights)
+# Clean everything (warning: wipes data and weights)
 clean-all:
     uv run cli.py clean --all
 
@@ -206,13 +265,9 @@ clean-all:
 status:
     uv run cli.py status
 
-# Show help (alias for default)
+# Show help
 help:
     @just --list
-
-# ============================================================================
-# Development Shortcuts
-# ============================================================================
 
 # Quick test pipeline
 quick-test:

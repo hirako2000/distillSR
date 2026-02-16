@@ -1,10 +1,10 @@
 # configs/train_config.yaml
-# Training configuration for RealPLKSR
+# Training configuration for RealPLKSR - NeoSR style
 
 experiment_name: nomos_uni_gt_4x
 
 # Model configuration
-model: realplksr  # realplksr, realplksr_s, realplksr_l
+model: realplksr
 model_params:
   in_ch: 3
   out_ch: 3
@@ -15,37 +15,45 @@ model_params:
   use_ea: true
   norm_groups: 4
   dropout: 0.1
-  dysample: false # disable for MPS, enable for CUDA
+  dysample: false  # disable for MPS, enable for CUDA
+  # Remove experimental features to match base model
+  # res_scale: 0.1
+  # use_layerscale: true
+  # drop_path: 0.1
 
 # Training parameters
 scale: 4
 iterations: 500000
 batch_size: 8
 patch_size: 256
-num_workers: 0 # MPS works better with 0, use 4 for CUDA
+num_workers: 0  # MPS works better with 0, use 4 for CUDA
 seed: 42
 
 # Datasets
 train_dataset: nomos_uni_gt
-val_dataset: nomos_uni_gt  # Will use same dataset with different transform
+val_dataset: nomos_uni_gt
 
-# Optimizer
-optimizer: AdamW
-learning_rate: 0.0001
-weight_decay: 0.0001
+# Optimizer - NeoSR style
+optimizer: adan_sf
+learning_rate: 0.0005  # 5e-4 for Adan
+weight_decay: 0.01
+warmup_steps: 1600
 scheduler: cosine
-min_lr: 0.0000001 
+min_lr: 0.0000001
 
-# Loss weights
+# Loss weights - NeoSR style (multiple losses)
 weight_l1: 1.0
-weight_l2: 0.1
-weight_ms_ssim: 0.2
-weight_perceptual: 0.1
+weight_ms_ssim: 1.0
+weight_consistency: 1.0
+weight_ldl: 1.0
+weight_fdl: 0.75
 
-# Loss options
+# Loss options - enable NeoSR losses
 use_l2: false
 use_ms_ssim: true
-use_perceptual: false
+use_consistency: true
+use_ldl: true
+use_fdl: true
 
 # Training options
 use_amp: false  # Mixed precision (disable for MPS)
@@ -60,6 +68,5 @@ save_interval: 5000
 val_interval: 5000
 log_images: true
 
-# Pretrained (optional)
-# pretrain_path: weights/4xmssim_realplksr_dysample_pretrain.pth
+# Pretrained
 pretrain_path: weights/4xNomos2_realplksr_dysample.pth

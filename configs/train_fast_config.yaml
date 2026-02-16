@@ -1,0 +1,68 @@
+# configs/train_fast_config.yaml
+# Fast test config with NeoSR-style parameters
+
+experiment_name: test_fast_adan
+
+model: realplksr
+model_params:
+  in_ch: 3
+  out_ch: 3
+  dim: 64
+  n_blocks: 28
+  kernel_size: 17
+  split_ratio: 0.25
+  use_ea: true
+  norm_groups: 4
+  dropout: 0.1
+  dysample: true
+  # No experimental features
+
+# Training parameters - reduced for fast testing
+scale: 4
+iterations: 1000  # Increased slightly for better testing
+batch_size: 4
+patch_size: 256
+num_workers: 0
+seed: 42
+
+# Datasets
+train_dataset: nomos_uni_gt
+val_dataset: null
+
+# Optimizer - NeoSR style with lower LR for fine-tuning
+optimizer: adan_sf
+learning_rate: 0.00005  # 5e-5 for fine-tuning
+weight_decay: 0.01
+warmup_steps: 100  # Shorter warmup for fast test
+scheduler: cosine
+min_lr: 0.0000001
+
+# Loss weights - NeoSR style
+weight_l1: 1.0
+weight_ms_ssim: 1.0
+weight_consistency: 1.0
+weight_ldl: 1.0
+weight_fdl: 0.75
+
+# Loss options - enable NeoSR losses for realistic test
+use_l2: false
+use_ms_ssim: true
+use_consistency: true
+use_ldl: true
+use_fdl: true
+
+# Training options
+use_amp: false
+grad_clip: 1.0
+crop_border: 4
+
+# Logging - more frequent for short run
+use_wandb: false
+log_interval: 10
+save_interval: 200
+val_interval: 1000000
+log_images: false
+
+# Pretrained
+pretrain_path: weights/4xmssim_realplksr_dysample_pretrain.pth
+# pretrain_path: weights/4xNomos2_realplksr_dysample.pth

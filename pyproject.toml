@@ -17,12 +17,18 @@ dependencies = [
     "opencv-python>=4.13.0.92",
     "pandas>=3.0.0",
     "pillow>=12.1.1",
+    "pyright>=1.1.408",
     "pytest>=9.0.2",
     "pytest-benchmark>=5.2.3",
+    "pytest-cov>=7.0.0",
+    "pytest-mock>=3.15.1",
+    "pytest-timeout>=2.4.0",
+    "pytest-xdist>=3.8.0",
     "pytorch-msssim>=1.0.0",
     "pyyaml>=6.0.3",
     "requests>=2.32.5",
     "rich>=14.3.2",
+    "ruff>=0.15.1",
     "scikit-image>=0.26.0",
     "scipy>=1.17.0",
     "torch>=2.10.0",
@@ -30,3 +36,101 @@ dependencies = [
     "tqdm>=4.67.3",
     "typer>=0.23.1",
 ]
+
+[tool.uv]
+package = true
+
+[build-system]
+requires = ["setuptools>=68.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# Add this section to tell setuptools exactly which packages to include
+[tool.setuptools.packages.find]
+include = ["archs*", "training*", "pipeline*", "loggers*"]
+exclude = ["tests*", "docs*", "junk*", "logs*", "data*", "weights*", "exports*", "configs*"]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "standard"
+include = [
+    "train.py",
+    "inference.py", 
+    "export_onnx.py",
+    "cli.py",
+    "archs",
+    "training",
+    "pipeline",
+    "loggers",
+    "tests"
+]
+exclude = [
+    "**/__pycache__",
+    "**/node_modules",
+    "data",
+    "logs",
+    "weights",
+    "exports",
+    "configs",
+    "junk"
+]
+reportMissingTypeStubs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-ra -v --ruff --cov=src/ --cov-report=term-missing --cov-report=html"
+filterwarnings = [
+    "ignore::DeprecationWarning:torch.jit.*",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError"
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "F",   # Pyflakes
+    "I",   # isort
+    "E",   # Pycodestyle Errors
+    "W",   # Pycodestyle Warnings
+    "B",   # flake8-bugbear
+    "S",   # Bandit (Security)
+    "PL",  # Pylint
+    "C4",  # Comprehensions
+    "C90", # McCabe complexity
+    "TID", # Tidy imports
+]
+ignore = [
+#    "E501",
+#    "S311",    # Randomness
+#    "C901",    # Complexity
+#    "PLR0915", # Too many statements
+#    "PLR2004", # Magic numbers/values,
+#    "PLR0912", # Many branches
+#    "PLR0913", # Many arguments
+#    "S324", # MD5
+#    "I001", # Ordered imnports
+#    "W293", # blank line whitespace
+#    "W292" # no new line at end of file
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.ruff.lint.isort]
+known-first-party = ["archs", "training", "pipeline", "loggers"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]

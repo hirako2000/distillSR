@@ -1,37 +1,41 @@
-# Cross-Platform Precision Strategy
+# Cross Platform & precision optimisation
 
-Optimization is not one-size-fits-all. The optimal precision depends on the hardware target. While training typically uses FP32 full precision, deployment should target lower bit-widths to maximize throughput.
+Not one-size-fits-all. Optimal precision depends on the hardware target. While training typically uses FP32 full precision, deployment should target lower bit-widths to maximize throughput.
 
-NVIDIA GPUs with CUDA benefit from FP16 precision. Tensor Cores are optimized for FP16 and BF16 math, often doubling speed compared to FP32 with negligible visual quality loss. Optimization backends include TensorRT and CUDA Graphs.
+NVIDIA GPUs with CUDA benefit from FP16 precision. Tensor Cores are optimized for FP16 and BF16 math, often doubling speed compared to FP32 with negligible visual quality loss. ONNX models can be further compiled into TensorRT engines that fuse layers and optimize memory access for specific GPU architectures.
 
-Apple Silicon with MPS thrives on BF16. Bfloat16 offers the same dynamic range as FP32 with half the memory, preventing NaN errors often encountered with standard FP16 during deep restoration. Metal Performance Shaders provide the optimization backend.
+Apple Silicon with MPS thrives on BF16. Bfloat16 offers the same dynamic range as FP32 with half the memory, preventing NaN errors often encountered with standard FP16 during deep restoration. CoreML conversion enables deployment through the Apple Neural Engine for further acceleration.
 
-Intel and AMD CPUs gain most from INT8 quantization. Since CPUs lack the massive parallel floating-point power of GPUs, converting weights to eight-bit integers allows the model to utilize VNNI or AVX-512 instructions for substantial speed improvements.
+Intel and AMD CPUs gain most from INT8 quantization. Converting weights to eight-bit integers allows the model to utilize VNNI or AVX-512 instructions for substantial speed improvements. ONNX Runtime with OpenVINO can further optimize CPU inference.
 
-Edge and mobile devices target INT8 or FP8 precision through CoreML and ONNX Runtime backends.
+Edge and mobile devices target INT8 or FP8 precision through CoreML and ONNX Runtime backends, balancing model size against inference speed on resource-constrained hardware.
 
-## Unified Quantization Logic
+## Quantization
 
-Quantization reduces memory footprint and accelerates arithmetic operations. For image restoration, weight-only quantization or static quantization maintain high structural integrity by preserving activation precision while compressing model weights.
+Quantization reduces numerical precision from 32-bit floating point to lower bit-widths such as 16-bit float or 8-bit integer. This compresses model size and accelerates arithmetic operations at the cost of marginal precision loss that rarely affects visual quality. 
 
-# Model Export Universal
+For image restoration, dynamic quantization compresses weights to INT8 while preserving activation precision, maintaining structural integrity. The export pipeline supports both FP16 conversion and INT8 dynamic quantization.
 
-## Standardizing for Production with ONNX and Beyond
+# Model Exports
 
-To ensure the model runs anywhere without requiring the original PyTorch source code, we use a tiered export strategy with ONNX as the universal intermediate representation.
+ONNX is an universal standard.
 
-## ONNX Universal Intermediate
+## ONNX exporter
 
-ONNX, the Open Neural Network Exchange format, serves as the primary bridge between training and deployment. An exported ONNX file runs via ONNX Runtime, which automatically selects the optimal provider for the available hardware at runtime. The same ONNX file can execute through ORT-CUDA on NVIDIA hardware, ORT-MPS on Apple Silicon, or ORT-OpenVINO on Intel processors.
+ONNX serves as the intermediate representation between training and deployment. An exported ONNX file runs via the ONNX Runtime, which automatically selects the optimal provider for available hardware: ORT-CUDA on NVIDIA, ORT-MPS on Apple Silicon, or ORT-OpenVINO on Intel processors. Export uses opset version 18 with constant folding optimization.
 
 ## Export Constraints
 
-When exporting to ONNX, dynamic axes must be enabled. This allows the model to process images of any size rather than being locked to a fixed resolution, essential for the tiling strategy that handles arbitrarily large inputs.
+Dynamic axes must be enabled during ONNX export. This allows the model to process images of any size rather than being locked to a fixed resolution, essential for the tiling strategy that handles arbitrarily large inputs.
 
-## Hardware-Specific Last Mile Conversion
+## Hardware-Specific Conversion
 
-While ONNX provides universal compatibility, some platforms offer deeper optimizations through hardware-specific formats. For Apple hardware, ONNX converts to CoreML as a mlpackage to utilize the dedicated Apple Neural Engine. For NVIDIA hardware, ONNX converts to a TensorRT engine as a plan file to fuse layers and optimize memory kernels for specific GPU architectures such as Ada Lovelace or Ampere.
+For Apple hardware, ONNX converts to CoreML as a mlpackage to utilize the Apple Neural Engine. For NVIDIA hardware, ONNX converts to a TensorRT engine that fuses layers and optimizes memory kernels for specific GPU architectures.
+
+## Model Card
+
+Export generates a JSON model card containing architecture details, parameter count, training provenance, validation metrics, and exported formats. This metadata accompanies the weights for provenance tracking and deployment documentation.
 
 ## Advice
 
-For production release, three weight variants should be provided. The fp16 ONNX model serves as the standard high-speed version for most GPUs. The int8 ONNX model provides a lightweight version for CPU-only environments. The full precision PyTorch checkpoint allows further training or fine-tuning.
+For production release, provide three weight variants. The fp16 ONNX model serves as the standard high-speed version for most GPUs. The int8 ONNX model provides a lightweight version for CPU-only environments. The full precision PyTorch checkpoint allows further training or fine-tuning. Configure input shapes with dynamic axes to maintain flexibility for variable-sized inputs required by the tiling strategy.

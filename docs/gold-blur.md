@@ -10,16 +10,20 @@ Generalized Gaussian blur adjusts the distribution peak sharpness through shape 
 
 Plateau blur creates a flat central region with Gaussian falloff. Plateau ratio between 0.3 and 0.7 determines flat portion size relative to sigma sampled from 1.0 to 5.0. This simulates sensor blooming or over-exposure artifacts.
 
-# Multi-Modal Noising
+# Multi-Modal noising
 
 Noise is injected into clean Silver patches to simulate the electrical interference found in low-light digital photography. Two noise models are applied stochastically with parameters randomized per batch.
 
-## Gaussian Noise
+## Gaussian noise
 
 Johann Carl Friedrich Gauss is everywhere. Gaussian noise simulates the standard electronic hiss of a digital sensor. It is additive and follows a normal distribution. In the Gold tier, standard deviation is randomized between 0.01 and 0.1 for every batch, ensuring the model can handle both subtle grain and heavy static. This models sensor read noise and electronic interference.
 
-## Poisson Noise
+## Poisson noise
 
 Siméon Denis Poisson provides the method for simulating shot noise, a quantum effect of light. Unlike Gaussian noise, Poisson noise is signal-dependent and more prominent in darker image regions. The implementation scales the image by a factor between 10 and 100 to simulate photon counts, applies Poisson sampling, then rescales. When Poisson sampling fails due to numerical instability, the implementation falls back to Gaussian noise. This is useful for training the model to clean shadows without destroying texture in well-lit areas.
+
+## Noise randomiation
+
+Noise parameters are randomized per batch independently for the first and second degradation passes. The first pass typically applies lighter noise to simulate original sensor capture, while the second pass may apply heavier noise to simulate re-upload or compression artifacts. Both Gaussian and Poisson noise models can be applied as grayscale or color noise, with grayscale noise probability configurable through the pipeline parameters.
 
 We also do resize compression. Read about it [here](./gold-resize-compress.md).

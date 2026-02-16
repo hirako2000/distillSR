@@ -1,110 +1,20 @@
-# archs/realplksr.py
 """
 RealPLKSR architecture from neosr framework
-Exactly matches the pretrained weights format
 """
 
 from functools import partial
+from typing import Optional
 
 import torch
-import torch.nn as nn
+from torch import nn
 from torch.nn.init import trunc_normal_
 
-from .dysample import DySample
-
-
-class DCCM(nn.Sequential):
-    """Doubled Convolutional Channel Mixer"""
-
-    def __init__(self, dim: int):
-        super().__init__(
-            nn.Conv2d(dim, dim * 2, 3, 1, 1),
-            nn.Mish(),
-            nn.Conv2d(dim * 2, dim, 3, 1, 1),
-        )
-        trunc_normal_(self[-1].weight, std=0.02)
-
-
-class PLKConv2d(nn.Module):
-    """Partial Large Kernel Convolutional Layer"""
-
-    def __init__(self, dim: int, kernel_size: int):
-        super().__init__()
-        self.conv = nn.Conv2d(dim, dim, kernel_size, 1, kernel_size // 2)
-        trunc_normal_(self.conv.weight, std=0.02)
-        self.idx = dim
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.training:
-            x1, x2 = torch.split(x, [self.idx, x.size(1) - self.idx], dim=1)
-            x1 = self.conv(x1)
-            return torch.cat([x1, x2], dim=1)
-        x[:, : self.idx] = self.conv(x[:, : self.idx])
-        return x
-
-
-class EA(nn.Module):
-    """Element-wise Attention"""
-
-    def __init__(self, dim: int):
-        super().__init__()
-        self.f = nn.Sequential(nn.Conv2d(dim, dim, 3, 1, 1), nn.Sigmoid())
-        trunc_normal_(self.f[0].weight, std=0.02)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x * self.f(x)
-
-
-class PLKBlock(nn.Module):
-    def __init__(
-        self,
-        dim: int,
-        kernel_size: int,
-        split_ratio: float,
-        norm_groups: int,
-        use_ea: bool = True,
-    ):
-        super().__init__()
-
-        # Local Texture
-        self.channel_mixer = DCCM(dim)
-
-        # Long-range Dependency
-        pdim = int(dim * split_ratio)
-
-        # Conv Layer
-        self.lk = PLKConv2d(pdim, kernel_size)
-
-        # Instance-dependent modulation
-        if use_ea:
-            self.attn = EA(dim)
-        else:
-            self.attn = nn.Identity()
-
-        # Refinement
-        self.refine = nn.Conv2d(dim, dim, 1, 1, 0)
-        trunc_normal_(self.refine.weight, std=0.02)
-
-        # Group Normalization
-        self.norm = nn.GroupNorm(norm_groups, dim)
-        nn.init.constant_(self.norm.bias, 0)
-        nn.init.constant_(self.norm.weight, 1.0)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x_skip = x
-        x = self.channel_mixer(x)
-        x = self.lk(x)
-        x = self.attn(x)
-        x = self.refine(x)
-        x = self.norm(x)
-
-        return x + x_skip
+from .blocks.plk_block import PLKBlock
+from .upsamplers.dysample import DySample
 
 
 class realplksr(nn.Module):
-    """Partial Large Kernel CNNs for Efficient Super-Resolution:
-    https://arxiv.org/abs/2404.11848
-    """
+    """Partial Large Kernel CNNs for Efficient Super-Resolution"""
 
     def __init__(
         self,
@@ -119,6 +29,7 @@ class realplksr(nn.Module):
         norm_groups: int = 4,
         dropout: float = 0,
         dysample: bool = False,
+        res_scale: Optional[float] = None,
         **kwargs,
     ):
         super().__init__()
@@ -128,27 +39,36 @@ class realplksr(nn.Module):
         if not self.training:
             dropout = 0
 
-        # Build feats sequentially exactly like neosr
+        # Build feats sequentially
         layers = []
-        
+
         # Initial convolution
         layers.append(nn.Conv2d(in_ch, dim, 3, 1, 1))
-        
-        # PLKBlocks
+
+        # PLKBlocks with optional residual scaling
         for _ in range(n_blocks):
-            layers.append(
-                PLKBlock(dim, kernel_size, split_ratio, norm_groups, use_ea)
-            )
-        
+            # Only pass res_scale if it's provided
+            block_kwargs = {
+                'dim': dim,
+                'kernel_size': kernel_size,
+                'split_ratio': split_ratio,
+                'norm_groups': norm_groups,
+                'use_ea': use_ea,
+            }
+            if res_scale is not None:
+                block_kwargs['res_scale'] = res_scale
+
+            layers.append(PLKBlock(**block_kwargs))
+
         # Dropout
         if dropout > 0:
             layers.append(nn.Dropout2d(dropout))
-        
+
         # Final convolution
         layers.append(nn.Conv2d(dim, out_ch * upscaling_factor**2, 3, 1, 1))
-        
+
         self.feats = nn.Sequential(*layers)
-        
+
         trunc_normal_(self.feats[0].weight, std=0.02)
         trunc_normal_(self.feats[-1].weight, std=0.02)
 
@@ -159,7 +79,7 @@ class realplksr(nn.Module):
         if dysample and upscaling_factor != 1:
             groups = out_ch if upscaling_factor % 2 != 0 else 4
             self.to_img = DySample(
-                in_ch * upscaling_factor**2,  # They use in_ch (3) not dim!
+                in_ch * upscaling_factor**2,
                 out_ch,
                 upscaling_factor,
                 groups=groups,
