@@ -3,6 +3,7 @@ from typing import Any, Dict
 
 import torch
 import torch.nn.functional as F
+from pytorch_msssim import ms_ssim
 from torch import nn
 
 logger = logging.getLogger(__name__)
@@ -37,12 +38,7 @@ class L2Loss(BaseLoss):
 class MSSSIMLoss(BaseLoss):
     def __init__(self, weight: float = 1.0):
         super().__init__(weight)
-        try:
-            from pytorch_msssim import ms_ssim
-            self.ms_ssim = ms_ssim
-        except ImportError:
-            logger.error("pytorch_msssim not installed")
-            raise
+        self.ms_ssim = ms_ssim
 
     def forward(self, sr, hr):
         return (1 - self.ms_ssim(sr, hr, data_range=1.0)) * self.weight

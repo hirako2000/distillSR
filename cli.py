@@ -4,15 +4,17 @@ Command-line interface for RealPLKSR Factory
 All pipeline steps accessible through typer commands
 """
 
+import gc
 import multiprocessing
-
-multiprocessing.set_start_method('fork', force=True)
-
 import os
+import pickle
+import shutil
 import sys
 from pathlib import Path
 from typing import Optional
 
+import cv2
+import lmdb
 import torch
 import typer
 import yaml
@@ -20,7 +22,18 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-# Add project root to path
+from export_onnx import ModelExporter, load_model_for_export
+from inference import InferenceEngine
+from loggers.logger import test_logger
+from pipeline.degradations import test_degradation
+from pipeline.fetch_hf import HFDataFetcher, create_synthetic_dataset
+from pipeline.medallion_svc import MedallionService
+from train import Trainer
+from train import main as train_main
+from training.metrics import test_metrics
+
+multiprocessing.set_start_method('fork', force=True)
+
 sys.path.append(str(Path(__file__).parent))
 
 app = typer.Typer(help="RealPLKSR Factory: Super-Resolution Training & Inference Pipeline")
@@ -33,7 +46,7 @@ console = Console()
 @app.command("list-datasets")
 def list_datasets():
     """List available datasets on Hugging Face"""
-    from pipeline.fetch_hf import HFDataFetcher
+    
 
     with Progress(
         SpinnerColumn(),
@@ -66,8 +79,6 @@ def download_dataset(
     workers: int = typer.Option(4, help="Parallel workers")
 ):
     """Download a dataset from Hugging Face Hub"""
-    from pipeline.fetch_hf import HFDataFetcher
-
     console.print(f"\n📥 [bold]Downloading dataset:[/bold] {dataset}")
 
     with Progress() as progress:
@@ -104,8 +115,6 @@ def create_synthetic(
     sizes: str = typer.Option("1024,2048,4096", help="Comma-separated image sizes")
 ):
     """Create synthetic dataset for testing"""
-    from pipeline.fetch_hf import create_synthetic_dataset
-
     size_list = [int(s) for s in sizes.split(',')]
     size_tuples = [(s, s) for s in size_list]
 
@@ -140,7 +149,6 @@ def process_dataset(
     silver: str = typer.Option("data/silver", help="Silver directory")
 ):
     """Process bronze dataset to silver LMDB"""
-    from pipeline.medallion_svc import MedallionService
 
     console.print(f"\n⚙️  [bold]Processing dataset:[/bold] {dataset}")
     console.print(f"📂 Bronze: {bronze}/{dataset}")
@@ -204,7 +212,6 @@ def process_all_datasets(
     silver: str = typer.Option("data/silver", help="Silver directory")
 ):
     """Process all bronze datasets to silver"""
-    from pipeline.medallion_svc import MedallionService
 
     console.print(f"\n⚙️  [bold]Processing all datasets[/bold] in {bronze}")
 
@@ -231,8 +238,6 @@ def verify_lmdb(
     silver: str = typer.Option("data/silver", help="Silver directory")
 ):
     """Verify a silver layer LMDB database"""
-    from pipeline.medallion_svc import MedallionService
-
     console.print(f"\n🔍 [bold]Verifying LMDB:[/bold] {dataset}")
 
     service = MedallionService(silver_dir=silver)
@@ -251,8 +256,6 @@ def list_silver(
     silver: str = typer.Option("data/silver", help="Silver directory")
 ):
     """List processed silver datasets"""
-    from pipeline.medallion_svc import MedallionService
-
     silver_dir = Path(silver)
 
     if not silver_dir.exists():
@@ -275,9 +278,6 @@ def list_silver(
 
     for db in lmdb_dbs:
         try:
-            import pickle
-
-            import lmdb
             env = lmdb.open(str(db), readonly=True, lock=False)
             with env.begin() as txn:
                 metadata = pickle.loads(txn.get(b'__metadata__'))
@@ -311,9 +311,6 @@ def train(
     device: Optional[str] = typer.Option(None, help="Override device (cuda/mps/cpu)")
 ):
     """Start training with configuration file"""
-    import sys
-
-    from train import main as train_main
     sys.argv = ['train.py', '--config', config]
     if resume:
         sys.argv.extend(['--resume', resume])
@@ -327,9 +324,6 @@ def train(
 
 @app.command("train-default")
 def train_default():
-    """Train with default configuration (for quick testing)"""
-    from train import Trainer
-
     console.print("\n🚀 [bold]Starting training[/bold] with default config")
 
     # Create default config
@@ -382,9 +376,6 @@ def infer(
     dysample: bool = typer.Option(False, help="Use DySample upsampler (flag, no value needed)"),
     benchmark: bool = typer.Option(False, help="Print benchmark info")
 ):
-    """Run inference on image or directory"""
-    from inference import InferenceEngine
-
     console.print(f"\n🔮 [bold]Running inference[/bold] with model: {model}")
     console.print(f"  DySample: {'Yes' if dysample else 'No'}")
 
@@ -436,10 +427,6 @@ def benchmark(
     model_type: str = typer.Option("realplksr", help="Model architecture")
 ):
     """Benchmark inference speed"""
-    import cv2
-
-    from inference import InferenceEngine
-
     console.print(f"\n⏱️  [bold]Benchmarking model:[/bold] {model}")
 
     engine = InferenceEngine(
@@ -486,10 +473,6 @@ def export_model(
     ssim: float = typer.Option(0.0, help="Validation SSIM")
 ):
     """Export model to various formats"""
-    import gc
-
-    from export_onnx import ModelExporter, load_model_for_export
-
     console.print(f"\n📦 [bold]Exporting model:[/bold] {model}")
 
     # Parse input size
@@ -632,8 +615,6 @@ def export_model(
 @app.command("test-degradation")
 def test_degradation_cmd():
     """Test the second-order degradation pipeline"""
-    from pipeline.degradations import test_degradation
-
     console.print("\n🧪 [bold]Testing degradation pipeline[/bold]")
     test_degradation()
     return 0
@@ -642,8 +623,6 @@ def test_degradation_cmd():
 @app.command("test-metrics")
 def test_metrics_cmd():
     """Test image quality metrics"""
-    from training.metrics import test_metrics
-
     console.print("\n🧪 [bold]Testing metrics[/bold]")
     test_metrics()
     return 0
@@ -652,8 +631,6 @@ def test_metrics_cmd():
 @app.command("test-logger")
 def test_logger_cmd():
     """Test experiment logger"""
-    from loggers.logger import test_logger
-
     console.print("\n🧪 [bold]Testing logger[/bold]")
     test_logger()
     return 0
@@ -662,10 +639,6 @@ def test_logger_cmd():
 @app.command("test-all")
 def test_all():
     """Run all tests"""
-    from loggers.logger import test_logger
-    from pipeline.degradations import test_degradation
-    from training.metrics import test_metrics
-
     console.print("\n🧪 [bold]Running all tests[/bold]\n")
 
     tests = [
@@ -695,8 +668,6 @@ def clean(
     all: bool = typer.Option(False, help="Clean everything including data")
 ):
     """Clean generated files"""
-    import shutil
-
     dirs_to_clean = ['__pycache__', 'logs', 'temp_config.yaml']
     if all:
         dirs_to_clean.extend(['data/silver', 'exports', 'weights'])
@@ -716,8 +687,6 @@ def clean(
 @app.command("status")
 def status():
     """Show current status of data and models"""
-    from pipeline.medallion_svc import MedallionService
-
     console.print("\n📊 [bold]Pipeline Status[/bold]\n")
 
     # Check bronze layer

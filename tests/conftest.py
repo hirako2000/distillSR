@@ -4,6 +4,8 @@ from typing import Dict, List
 
 import pytest
 
+from archs.realplksr import realplksr
+
 
 def pytest_addoption(parser):
     parser.addoption(
@@ -162,9 +164,6 @@ def pytorch_model_info(pytorch_models) -> Dict:
     info = {}
     for variant, path in pytorch_models.items():
         size_mb = path.stat().st_size / (1024 * 1024)
-
-        # Quick parameter count (load model just for this)
-        from archs.realplksr import realplksr
 
         model = realplksr(
             in_ch=3,

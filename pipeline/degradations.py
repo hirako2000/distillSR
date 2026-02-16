@@ -8,6 +8,7 @@ import random
 from typing import Optional, Tuple, Union
 
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from scipy import special
@@ -251,24 +252,24 @@ class DegradationEngine:
             noisy = img_float + noise
 
         elif noise_type == 'poisson':
-            # Poisson (shot) noise - signal dependent
-            # Scale to reasonable photon counts
+            # Poisson (shot) noise
+            # to reasonable photon counts
             scale = random.uniform(10, 100)
 
             # Ensure no negative values for Poisson
             # Poisson requires lambda >= 0
             scaled = img_float * scale
-            scaled = np.maximum(scaled, 0)  # Remove any negatives
+            scaled = np.maximum(scaled, 0)
 
             # Handle potential NaN
             if np.any(np.isnan(scaled)):
-                logger.warning("NaNs detected in Poisson input, using zeros")
+                logger.warning("NaNs detected in Poisson input, using zeros") # noqa: F821
                 scaled = np.zeros_like(scaled)
 
             try:
                 noisy = np.random.poisson(scaled).astype(np.float32) / scale
             except ValueError as e:
-                logger.warning(f"Poisson noise failed: {e}, falling back to Gaussian")
+                logger.warning(f"Poisson noise failed: {e}, falling back to Gaussian") # noqa: F821
                 sigma = random.uniform(0.01, 0.05)
                 noise = np.random.normal(0, sigma, img.shape)
                 noisy = img_float + noise
@@ -276,7 +277,6 @@ class DegradationEngine:
         else:
             noisy = img_float
 
-        # Clip output to valid range
         noisy = np.clip(noisy, 0, 1)
 
         return noisy.astype(np.float32)
@@ -432,13 +432,10 @@ class SecondOrderDegradation:
         else:
             return img
 
-
-# In pipeline/degradations.py, update the GoldTransform class:
-
 class GoldTransform:
     """
     PyTorch transform for on-the-fly Gold degradation
-    To be used with Silver Dataset
+    Off the Silver Dataset
     """
 
     def __init__(
@@ -462,7 +459,7 @@ class GoldTransform:
             clean_patch (the original HR image) - the dataloader expects just the HR image
             The degradation is applied in the training loop
         """
-        # Just return the clean patch - degradation will be applied in training loop
+        # degradation will be applied in training loop
         return clean_patch
 
 
@@ -501,18 +498,16 @@ class GoldTransform:
         """
         Degrade a single image [C, H, W]
         """
-        # Ensure clean_patch is in [0, 1] range
+        # to ensure clean_patch is in [0, 1] range
         if clean_patch.max() > 1.0 or clean_patch.min() < 0:
-            logger.warning(f"Input patch out of range: min={clean_patch.min()}, max={clean_patch.max()}, clipping to [0,1]")
+            logger.warning(f"Input patch out of range: min={clean_patch.min()}, max={clean_patch.max()}, clipping to [0,1]") # noqa: F821
             clean_patch = torch.clamp(clean_patch, 0, 1)
 
-        # Convert to numpy [H, W, C]
+        # to numpy [H, W, C]
         img_np = clean_patch.permute(1, 2, 0).cpu().numpy()
 
-        # Apply degradation
         lr_np = self.degradation.degrade(img_np)
 
-        # Ensure LR has correct size
         lr_h = self.patch_size // self.scale
         lr_w = self.patch_size // self.scale
 
@@ -528,7 +523,6 @@ class GoldTransform:
 
 def test_degradation():
     """Test the degradation pipeline"""
-    import matplotlib.pyplot as plt
 
     # Create test image
     test_img = np.random.rand(512, 512, 3).astype(np.float32)

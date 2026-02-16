@@ -5,8 +5,10 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "coremltools>=9.0",
     "huggingface-hub>=1.4.1",
     "lmdb>=1.7.5",
+    "lpips>=0.1.4",
     "matplotlib>=3.10.8",
     "numpy>=2.4.2",
     "onnx>=1.20.1",
@@ -17,6 +19,7 @@ dependencies = [
     "opencv-python>=4.13.0.92",
     "pandas>=3.0.0",
     "pillow>=12.1.1",
+    "piq>=0.8.0",
     "pyright>=1.1.408",
     "pytest>=9.0.2",
     "pytest-benchmark>=5.2.3",
@@ -35,6 +38,7 @@ dependencies = [
     "torchvision>=0.25.0",
     "tqdm>=4.67.3",
     "typer>=0.23.1",
+    "wandb>=0.25.0",
 ]
 
 [tool.uv]
@@ -79,7 +83,7 @@ reportMissingTypeStubs = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "-ra -v --ruff --cov=src/ --cov-report=term-missing --cov-report=html"
+addopts = "-ra -v --cov=src/ --cov-report=term-missing --cov-report=html"
 filterwarnings = [
     "ignore::DeprecationWarning:torch.jit.*",
 ]
@@ -113,17 +117,25 @@ select = [
     "TID", # Tidy imports
 ]
 ignore = [
-#    "E501",
-#    "S311",    # Randomness
-#    "C901",    # Complexity
-#    "PLR0915", # Too many statements
-#    "PLR2004", # Magic numbers/values,
-#    "PLR0912", # Many branches
-#    "PLR0913", # Many arguments
-#    "S324", # MD5
-#    "I001", # Ordered imnports
-#    "W293", # blank line whitespace
-#    "W292" # no new line at end of file
+    "B006", # mutable structure
+    "E501",
+    "S301", # pickle
+    "E722", # bare expect
+    "S603", # We trust input
+    "PLW1510", # sub process check
+    "S311",    # Randomness
+    "C901",    # Complexity
+    "PLR0915", # Too many statements
+    "PLR2004", # Magic numbers/values,
+     "PLR0912", # Many branches
+    "PLR0913", # Many arguments
+    "S324", # MD5
+    "PLW2901", # loop reassign
+#   "I001", # Ordered imnports
+    "W293", # blank line whitespace
+    "W292", # no new line at end of file
+    "S101", # asserts
+    "TID252" # parent module
 ]
 
 [tool.ruff.lint.mccabe]

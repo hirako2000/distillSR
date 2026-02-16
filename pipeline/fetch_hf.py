@@ -1,4 +1,3 @@
-# pipeline/fetch_hf.py
 """
 Hugging Face dataset downloader for Bronze layer ingestion
 Downloads high-resolution images from HF Hub datasets
@@ -18,7 +17,6 @@ from huggingface_hub import HfApi, hf_hub_download, list_repo_files
 from PIL import Image
 from tqdm import tqdm
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -29,7 +27,6 @@ logger = logging.getLogger(__name__)
 class HFDataFetcher:
     """Fetch and download datasets from Hugging Face Hub"""
 
-    # Common SR datasets on HF Hub
     KNOWN_DATASETS = {
         'nomosv2': 'philiphoffmann/nomosv2',
         'lsdir': 'philiphoffmann/LSDIR',
@@ -40,7 +37,6 @@ class HFDataFetcher:
         'manga109': 'philiphoffmann/Manga109',
     }
 
-    # Supported image formats
     IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.webp'}
 
     def __init__(
@@ -62,7 +58,6 @@ class HFDataFetcher:
         self.timeout = timeout
         self.api = HfApi()
 
-        # Statistics
         self.stats = {
             'downloaded': 0,
             'skipped': 0,
@@ -97,7 +92,6 @@ class HFDataFetcher:
         Returns:
             Statistics dictionary
         """
-        # Resolve repo_id
         if repo_id is None:
             if dataset_name in self.KNOWN_DATASETS:
                 repo_id = self.KNOWN_DATASETS[dataset_name]
@@ -107,29 +101,23 @@ class HFDataFetcher:
                     f"Known: {list(self.KNOWN_DATASETS.keys())}"
                 )
 
-        # Set extensions
         if extensions is None:
             extensions = list(self.IMAGE_EXTENSIONS)
 
-        # Create dataset directory
         dataset_dir = self.bronze_dir / dataset_name
         dataset_dir.mkdir(exist_ok=True)
 
         logger.info(f"Downloading {dataset_name} from {repo_id} to {dataset_dir}")
 
         try:
-            # List all files in repo
             files = list_repo_files(repo_id, repo_type="dataset")
 
-            # Filter for images and subset
             image_files = []
             for f in files:
-                # Check extension
                 ext = Path(f).suffix.lower()
                 if ext not in extensions:
                     continue
 
-                # Check subset
                 if subset and not f.startswith(subset):
                     continue
 
@@ -137,12 +125,10 @@ class HFDataFetcher:
 
             logger.info(f"Found {len(image_files)} images in repository")
 
-            # Limit if specified
             if max_images:
                 image_files = image_files[:max_images]
                 logger.info(f"Limited to {max_images} images")
 
-            # Download files
             self.stats = self._download_files(
                 repo_id,
                 image_files,
@@ -173,17 +159,14 @@ class HFDataFetcher:
         stats = {'downloaded': 0, 'skipped': 0, 'failed': 0, 'total_size_mb': 0}
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            # Submit all download tasks
             future_to_file = {}
             for f in files:
                 local_path = dataset_dir / f
 
-                # Skip if already exists
                 if local_path.exists():
                     stats['skipped'] += 1
                     continue
 
-                # Create parent directories
                 local_path.parent.mkdir(parents=True, exist_ok=True)
 
                 future = executor.submit(
@@ -195,7 +178,6 @@ class HFDataFetcher:
                 )
                 future_to_file[future] = f
 
-            # Process completed downloads with progress bar
             with tqdm(total=len(future_to_file), desc="Downloading") as pbar:
                 for future in as_completed(future_to_file):
                     f = future_to_file[future]
@@ -223,7 +205,6 @@ class HFDataFetcher:
     ) -> Tuple[bool, int]:
         """Download and validate a single file"""
         try:
-            # Download file
             downloaded_path = hf_hub_download(
                 repo_id=repo_id,
                 filename=file_path,
@@ -233,12 +214,10 @@ class HFDataFetcher:
                 resume=True
             )
 
-            # Verify image
             if not self._verify_image(downloaded_path, min_resolution):
                 os.remove(downloaded_path)
                 return False, 0
 
-            # Get file size
             size = os.path.getsize(downloaded_path)
 
             return True, size
@@ -257,15 +236,12 @@ class HFDataFetcher:
             with Image.open(path) as img:
                 width, height = img.size
 
-                # Check resolution
                 if height < min_resolution[0] or width < min_resolution[1]:
                     logger.debug(f"Image {path} too small: {width}x{height}")
                     return False
 
-                # Check if image is corrupted
                 img.verify()
 
-                # Reopen after verify (verify closes the file)
                 with Image.open(path) as img:
                     img.load()
 
@@ -290,7 +266,6 @@ class HFDataFetcher:
         with tqdm(total=len(urls), desc="Downloading URLs") as pbar:
             for url in urls:
                 try:
-                    # Generate filename from URL
                     filename = url.split('/')[-1].split('?')[0]
                     if not any(filename.lower().endswith(ext) for ext in self.IMAGE_EXTENSIONS):
                         filename += '.jpg'
@@ -302,7 +277,6 @@ class HFDataFetcher:
                         pbar.update(1)
                         continue
 
-                    # Download
                     response = requests.get(url, timeout=self.timeout, stream=True)
                     response.raise_for_status()
 
@@ -310,7 +284,6 @@ class HFDataFetcher:
                         for chunk in response.iter_content(chunk_size=8192):
                             f.write(chunk)
 
-                    # Verify
                     if self._verify_image(str(local_path), min_resolution):
                         size = os.path.getsize(local_path)
                         stats['downloaded'] += 1
@@ -344,19 +317,15 @@ def create_synthetic_dataset(
     logger.info(f"Generating {num_images} synthetic images in {output_dir}")
 
     for i in tqdm(range(num_images), desc="Generating"):
-        # Random size from list
         size = sizes[np.random.randint(len(sizes))]
 
-        # Create random noise image
         img = np.random.randint(0, 255, (*size, 3), dtype=np.uint8)
 
-        # Add some patterns
         cv2.rectangle(img, (100, 100), (size[0]-100, size[1]-100),
                      (255, 255, 255), 2)
         cv2.circle(img, (size[0]//2, size[1]//2), 200,
                   (128, 128, 128), -1)
 
-        # Save
         cv2.imwrite(str(output_path / f"synthetic_{i:04d}.png"), img)
 
     logger.info(f"Generated {num_images} synthetic images")
@@ -368,10 +337,8 @@ def main():
 
     subparsers = parser.add_subparsers(dest='command', help='Commands')
 
-    # List datasets
-    list_parser = subparsers.add_parser('list', help='List available datasets')
+    subparsers.add_parser('list', help='List available datasets')
 
-    # Download dataset
     download_parser = subparsers.add_parser('download', help='Download dataset')
     download_parser.add_argument('dataset', help='Dataset name')
     download_parser.add_argument('--repo', help='HF repo ID (optional)')
@@ -384,7 +351,6 @@ def main():
     download_parser.add_argument('--workers', type=int, default=4,
                                 help='Parallel workers')
 
-    # Synthetic dataset
     synthetic_parser = subparsers.add_parser('synthetic', help='Create synthetic dataset')
     synthetic_parser.add_argument('--num', type=int, default=100,
                                  help='Number of images')

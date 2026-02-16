@@ -41,7 +41,7 @@ class DySample(nn.Module):
             assert in_channels % groups == 0
         except:
             msg = "Incorrect in_channels and groups values."
-            raise ValueError(msg)
+            raise ValueError(msg) # noqa: B904
 
         out_channels = 2 * groups * scale**2
         self.scale = scale

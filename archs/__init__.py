@@ -2,19 +2,12 @@
 Architecture modules for RealPLKSR Factory
 """
 
-# Import upsamplers package FIRST to ensure decorators run
-from . import upsamplers
-
-# Export components for testing
+from . import upsamplers  # noqa: F401
 from .blocks.common import DCCM, EA
-from .blocks.conv import PLKConv2d  # Remove PLKConv2dV2
+from .blocks.conv import PLKConv2d
 from .blocks.plk_block import PLKBlock
 from .factory import create_model
-
-# Export main model classes for backward compatibility
 from .realplksr import realplksr, realplksr_l, realplksr_s
-
-# Export upsamplers
 from .upsamplers import DySample, PixelShuffleUpsampler, create_upsampler
 
 __all__ = [
@@ -24,7 +17,7 @@ __all__ = [
     'create_model',
     'DCCM',
     'EA',
-    'PLKConv2d',  # Remove PLKConv2dV2
+    'PLKConv2d',
     'PLKBlock',
     'DySample',
     'PixelShuffleUpsampler',

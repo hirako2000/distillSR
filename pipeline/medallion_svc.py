@@ -1,4 +1,3 @@
-# pipeline/medallion_svc.py
 """
 Medallion Service: Bronze → Silver transformation
 Validates images, extracts patches, and stores in LMDB for zero-copy access
@@ -62,13 +61,10 @@ class MedallionService:
         self.num_workers = num_workers
         self.map_size = map_size
 
-        # Create directories
         self.silver_dir.mkdir(parents=True, exist_ok=True)
 
-        # Supported image formats
         self.image_extensions = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.webp'}
 
-        # Statistics
         self.stats = {
             'total_images': 0,
             'valid_images': 0,
@@ -78,25 +74,19 @@ class MedallionService:
             'processing_time': 0
         }
 
-    # In pipeline/medallion_svc.py, let's fix the scan_bronze method:
-
     def scan_bronze(self) -> List[Path]:
         """Scan bronze directory for all image files"""
         image_files = []
 
-        # Make sure the dataset directory exists
         dataset_path = self.bronze_dir
         if not dataset_path.exists():
             logger.error(f"Bronze directory not found: {dataset_path}")
             return []
 
-        # Recursively find all images
         for ext in self.image_extensions:
-            # Case-insensitive glob
             image_files.extend(dataset_path.rglob(f"*{ext}"))
             image_files.extend(dataset_path.rglob(f"*{ext.upper()}"))
 
-        # Remove duplicates and sort
         image_files = sorted(set(image_files))
 
         logger.info(f"Found {len(image_files)} images in {dataset_path}")
@@ -137,38 +127,31 @@ class MedallionService:
         patches = []
 
         try:
-            # Load image
             img = cv2.imread(str(image_path))
             if img is None:
                 logger.warning(f"Failed to load {image_path}")
                 return patches
 
-            # Convert BGR to RGB
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
             h, w = img.shape[:2]
 
-            # Calculate number of patches
             n_h = max(1, (h - self.patch_size) // self.stride + 1)
             n_w = max(1, (w - self.patch_size) // self.stride + 1)
 
-            # Extract patches
             for i in range(n_h):
                 for j in range(n_w):
                     y = i * self.stride
                     x = j * self.stride
 
-                    # Ensure patch is within bounds
                     if y + self.patch_size <= h and x + self.patch_size <= w:
                         patch = img[y:y + self.patch_size, x:x + self.patch_size]
 
-                        # Create unique key
                         rel_path = image_path.relative_to(self.bronze_dir)
                         key = f"{dataset_name}/{rel_path}_{i:04d}_{j:04d}"
 
                         patches.append((key, patch))
 
-                        # Optional: extract flipped/rotated versions for augmentation
                         if self.stride == self.patch_size:  # Non-overlapping only
                             # Horizontal flip
                             key_flip = f"{key}_flip"
@@ -191,7 +174,6 @@ class MedallionService:
         """Process a single dataset from bronze to silver"""
         start_time = time.time()
 
-        # Find all images in dataset
         dataset_path = self.bronze_dir / dataset_name
         if not dataset_path.exists():
             raise ValueError(f"Dataset not found: {dataset_path}")
@@ -200,7 +182,6 @@ class MedallionService:
 
         image_files = []
         for ext in self.image_extensions:
-            # Use glob to find all images
             found = list(dataset_path.glob(f"*{ext}"))
             image_files.extend(found)
             logger.info(f"Found {len(found)} images with extension {ext}")
@@ -231,7 +212,6 @@ class MedallionService:
 
         logger.info(f"Processing dataset '{dataset_name}' with {len(image_files)} images")
 
-        # Validate images
         valid_images = []
         for img_path in tqdm(image_files, desc="Validating images"):
             is_valid, dims = self.validate_image(img_path)
@@ -249,7 +229,6 @@ class MedallionService:
             logger.warning("No valid images found")
             return self.stats
 
-        # Setup LMDB
         db_path = self.silver_dir / f"{dataset_name}.lmdb"
         db_path.mkdir(exist_ok=True)
 
@@ -264,7 +243,6 @@ class MedallionService:
             map_async=True
         )
 
-        # Process images
         all_patches = []
 
         with tqdm(total=len(valid_images), desc="Extracting patches") as pbar:
@@ -278,11 +256,9 @@ class MedallionService:
 
         logger.info(f"Extracted {len(all_patches)} patches")
 
-        # Write to LMDB
         logger.info(f"Writing {len(all_patches)} patches to LMDB...")
 
         with env.begin(write=True) as txn:
-            # Store metadata
             metadata = {
                 'dataset': dataset_name,
                 'num_patches': len(all_patches),
@@ -293,13 +269,11 @@ class MedallionService:
             }
             txn.put(b'__metadata__', pickle.dumps(metadata))
 
-            # Write patches in batches
             batch_size = 1000
             for i in tqdm(range(0, len(all_patches), batch_size), desc="Writing to LMDB"):
                 batch = all_patches[i:i + batch_size]
 
                 for key, patch in batch:
-                    # Encode patch as PNG for compression
                     success, encoded = cv2.imencode('.png', cv2.cvtColor(patch, cv2.COLOR_RGB2BGR))
                     if success:
                         txn.put(key.encode('ascii'), encoded.tobytes())
@@ -321,7 +295,6 @@ class MedallionService:
 
     def process_all(self, max_datasets: Optional[int] = None) -> Dict[str, Any]:
         """Process all datasets in bronze layer"""
-        # Find all dataset directories
         datasets = [d for d in self.bronze_dir.iterdir() if d.is_dir()]
 
         if max_datasets:
@@ -348,11 +321,9 @@ class MedallionService:
             env = lmdb.open(str(db_path), readonly=True, lock=False)
 
             with env.begin() as txn:
-                # Check metadata
                 metadata = pickle.loads(txn.get(b'__metadata__'))
                 logger.info(f"Dataset metadata: {metadata}")
 
-                # Count patches
                 cursor = txn.cursor()
                 cursor.set_key(b'__metadata__')
 
@@ -361,7 +332,6 @@ class MedallionService:
                     if key != b'__metadata__':
                         patch_count += 1
 
-                        # Try to decode first patch
                         if patch_count == 1:
                             img_array = np.frombuffer(value, dtype=np.uint8)
                             img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
@@ -376,8 +346,6 @@ class MedallionService:
             logger.error(f"Verification failed: {e}")
             return False
 
-
-# In pipeline/medallion_svc.py, update the SilverDataset class:
 
 class SilverDataset(torch.utils.data.Dataset):
     """PyTorch Dataset for Silver LMDB"""
@@ -399,12 +367,11 @@ class SilverDataset(torch.utils.data.Dataset):
         self.transform = transform
         self.db_path = self.silver_dir / f"{dataset_name}.lmdb"
 
-        # Don't open LMDB here - do it lazily
+        # lazily
         self._env = None
         self._keys = None
         self.metadata = None
 
-        # Load metadata without opening full environment
         self._load_metadata()
 
         logger.info(f"Loaded SilverDataset '{dataset_name}' with {len(self)} patches")
@@ -436,12 +403,10 @@ class SilverDataset(torch.utils.data.Dataset):
                 meminit=False
             )
 
-            # Load keys if not already loaded
             if self._keys is None:
                 with self._env.begin() as txn:
                     self._keys = []
                     cursor = txn.cursor()
-                    # Skip metadata key
                     if cursor.first():
                         while cursor.next():
                             key = cursor.key()
@@ -453,30 +418,24 @@ class SilverDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx: int) -> torch.Tensor:
         """Get a single patch as tensor"""
-        # Initialize DB if needed
         self._init_db()
 
-        # Get key
         if self._keys is None:
             raise RuntimeError("Dataset not properly initialized")
 
-        # Handle index wrapping
         idx = idx % len(self._keys)
         key = self._keys[idx]
 
-        # Read from LMDB
         with self._env.begin() as txn:
             img_data = txn.get(key)
 
         if img_data is None:
             logger.warning(f"Could not read key {key}, returning random tensor")
-            # Return a random tensor as fallback
             dummy = torch.rand(3, 256, 256)
             if self.transform:
                 dummy = self.transform(dummy)
             return dummy
 
-        # Decode image
         try:
             img_array = np.frombuffer(img_data, dtype=np.uint8)
             img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
@@ -490,10 +449,8 @@ class SilverDataset(torch.utils.data.Dataset):
                 dummy = self.transform(dummy)
             return dummy
 
-        # Convert to tensor
         img_tensor = torch.from_numpy(img).permute(2, 0, 1).float() / 255.0
 
-        # Apply transforms
         if self.transform:
             img_tensor = self.transform(img_tensor)
 
@@ -516,7 +473,6 @@ def main():
 
     subparsers = parser.add_subparsers(dest='command', help='Commands')
 
-    # Process dataset
     process_parser = subparsers.add_parser('process', help='Process a dataset')
     process_parser.add_argument('dataset', help='Dataset name in bronze/ directory')
     process_parser.add_argument('--patch-size', type=int, default=256, help='Patch size')
@@ -527,7 +483,6 @@ def main():
     process_parser.add_argument('--bronze', default='data/bronze', help='Bronze directory')
     process_parser.add_argument('--silver', default='data/silver', help='Silver directory')
 
-    # Process all datasets
     all_parser = subparsers.add_parser('process-all', help='Process all datasets')
     all_parser.add_argument('--patch-size', type=int, default=256, help='Patch size')
     all_parser.add_argument('--min-size', type=int, default=1024, help='Minimum image size')
@@ -536,14 +491,12 @@ def main():
     all_parser.add_argument('--bronze', default='data/bronze', help='Bronze directory')
     all_parser.add_argument('--silver', default='data/silver', help='Silver directory')
 
-    # Verify LMDB
     verify_parser = subparsers.add_parser('verify', help='Verify LMDB database')
     verify_parser.add_argument('dataset', help='Dataset name')
     verify_parser.add_argument('--silver', default='data/silver', help='Silver directory')
 
-    # List datasets
-    list_parser = subparsers.add_parser('list', help='List processed datasets')
-    list_parser.add_argument('--silver', default='data/silver', help='Silver directory')
+    subparsers.add_parser('list', help='List processed datasets')
+    list_parser.add_argument('--silver', default='data/silver', help='Silver directory') # noqa: F821
 
     args = parser.parse_args()
 
@@ -581,7 +534,6 @@ def main():
             lmdb_dbs = list(silver_dir.glob("*.lmdb"))
             print(f"\nProcessed datasets in {silver_dir}:")
             for db in lmdb_dbs:
-                # Try to read metadata
                 try:
                     env = lmdb.open(str(db), readonly=True, lock=False)
                     with env.begin() as txn:

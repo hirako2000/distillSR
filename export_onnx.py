@@ -1,4 +1,3 @@
-# export_onnx.py
 """
 ONNX export and model conversion utilities
 Supports dynamic axes for variable-size input and hardware-specific optimizations
@@ -7,16 +6,42 @@ Supports dynamic axes for variable-size input and hardware-specific optimization
 import argparse
 import json
 import sys
+import traceback
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+import coremltools as ct
 import numpy as np
 import onnx
 import onnxruntime
 import torch
+from onnxconverter_common import float16
+from onnxoptimizer import optimize
+from onnxruntime.quantization import QuantType, quantize_dynamic
 from torch import nn
 
-# Add project root to path
+# Unfortunate tensorrt not on OSX
+try:
+    import tensorrt as trt
+    TENSORRT_AVAILABLE = True
+except ImportError:
+    TENSORRT_AVAILABLE = False
+    print("⚠️ TensorRT not available - TensorRT export will be disabled")
+    # Create a dummy module to avoid NameError
+    class trt:
+        class Logger:
+            INFO = None
+            def __init__(self, *args, **kwargs): pass
+        class Builder: pass
+        class NetworkDefinitionCreationFlag:
+            EXPLICIT_BATCH = 0
+        class OnnxParser: pass
+        class BuilderFlag:
+            FP16 = None
+            INT8 = None
+        class MemoryPoolType:
+            WORKSPACE = None
+
 sys.path.append(str(Path(__file__).parent))
 
 from archs.realplksr import realplksr
@@ -41,7 +66,6 @@ class ModelExporter:
         self.model_name = model_name
         self.device = device or torch.device('cpu')
 
-        # Ensure model is on CPU and in eval mode
         self.model = self.model.cpu()
         self.model.eval()
 
@@ -52,8 +76,8 @@ class ModelExporter:
         output_path: str,
         input_shape: Tuple[int, int, int, int] = (1, 3, 256, 256),
         dynamic_axes: bool = True,
-        opset_version: int = 18,  # Increased to 18
-        optimize: bool = False  # Disable optimization
+        opset_version: int = 18,
+        optimize: bool = False
     ):
         """
         Export model to ONNX format without optimization
@@ -66,18 +90,14 @@ class ModelExporter:
         print(f"  Model device: {self.device}")
 
         try:
-            # Create dummy input on CPU
             dummy_input = torch.randn(*input_shape)
             print(f"  ✓ Dummy input created: {dummy_input.shape}")
 
-            # Move model to CPU for export
             self.model = self.model.cpu()
             print("  ✓ Model moved to CPU")
 
-            # SKIP forward pass test
             print("  ⏭️  Skipping forward pass test")
 
-            # Define dynamic axes
             onnx_dynamic_axes = None
             if dynamic_axes:
                 onnx_dynamic_axes = {
@@ -86,7 +106,6 @@ class ModelExporter:
                 }
                 print("  ✓ Dynamic axes configured")
 
-            # Export with opset 18 (no version conversion needed)
             print("  Starting ONNX export...")
 
             torch.onnx.export(
@@ -105,31 +124,23 @@ class ModelExporter:
 
             print("  ✓ ONNX export completed")
 
-            # Verify the model
             print("  Verifying ONNX model...")
             onnx_model = onnx.load(output_path)
             onnx.checker.check_model(onnx_model)
             print("  ✓ ONNX check passed")
 
-            # Skip optimization to avoid errors
             print("  ⏭️  Skipping optimization")
 
             return onnx_model
 
         except Exception as e:
             print(f"\n❌ Export failed with error: {e}")
-            import traceback
             traceback.print_exc()
             raise
 
     def _optimize_onnx(self, onnx_path: str):
-        """Apply basic ONNX optimizations"""
-        from onnxoptimizer import optimize
-
-        # Load model
         model = onnx.load(onnx_path)
 
-        # Get available optimizations
         passes = [
             'eliminate_deadend',
             'eliminate_nop_transpose',
@@ -140,25 +151,18 @@ class ModelExporter:
             'nop'
         ]
 
-        # Optimize
         optimized_model = optimize(model, passes)
 
-        # Save optimized model
         opt_path = onnx_path.replace('.onnx', '_optimized.onnx')
         onnx.save(optimized_model, opt_path)
         print(f"Optimized model saved: {opt_path}")
 
     def convert_to_fp16(self, onnx_path: str, output_path: str):
         """Convert ONNX model to FP16 precision"""
-        from onnxconverter_common import float16
-
-        # Load model
         model = onnx.load(onnx_path)
 
-        # Convert to FP16
         model_fp16 = float16.convert_float_to_float16(model)
 
-        # Save
         onnx.save(model_fp16, output_path)
         print(f"FP16 model saved: {output_path}")
 
@@ -172,21 +176,9 @@ class ModelExporter:
     ):
         """
         Convert to INT8 quantization
-        
-        Note: Requires onnxruntime with quantization support
+        Requires onnxruntime with quantization support
         """
-        try:
-            from onnxruntime.quantization import (
-                QuantType,
-                quantize_dynamic,
-                quantize_static,
-            )
-        except ImportError:
-            print("onnxruntime quantization not available. Install with: pip install onnxruntime-extensions")
-            return
-
         if calibration_data is None:
-            # Dynamic quantization
             quantize_dynamic(
                 onnx_path,
                 output_path,
@@ -194,7 +186,6 @@ class ModelExporter:
             )
             print(f"INT8 dynamic quantized model saved: {output_path}")
         else:
-            # Static quantization (requires calibration)
             print("Static quantization not implemented in this example")
 
     def validate_onnx(
@@ -203,37 +194,32 @@ class ModelExporter:
         input_shape: Tuple[int, int, int, int] = (1, 3, 256, 256)
     ) -> bool:
         """
-        Validate ONNX model against PyTorch model - with better error handling
+        Validate ONNX model against PyTorch model
         """
         print(f"Validating ONNX model: {onnx_path}")
 
         try:
-            # Create ONNX runtime session
-            providers = ['CPUExecutionProvider']  # Use only CPU for validation
+            providers = ['CPUExecutionProvider']
 
             session = onnxruntime.InferenceSession(onnx_path, providers=providers)
 
-            # Create test input
             np.random.seed(42)
             test_input = np.random.randn(*input_shape).astype(np.float32)
 
-            # PyTorch inference (on CPU)
             with torch.no_grad():
                 torch_input = torch.from_numpy(test_input).float()
                 torch_output = self.model(torch_input).cpu().numpy()
 
-            # ONNX inference
             onnx_input = {session.get_inputs()[0].name: test_input}
             onnx_output = session.run(None, onnx_input)[0]
 
-            # Compare
             diff = np.abs(torch_output - onnx_output).max()
             mean_diff = np.abs(torch_output - onnx_output).mean()
 
             print(f"Max difference: {diff:.6f}")
             print(f"Mean difference: {mean_diff:.6f}")
 
-            if diff < 1e-3:  # Relaxed tolerance
+            if diff < 1e-3:
                 print("✓ ONNX validation passed")
                 return True
             else:
@@ -242,7 +228,6 @@ class ModelExporter:
 
         except Exception as e:
             print(f"⚠️ Validation skipped (non-critical): {e}")
-            # Don't fail the export if validation has issues
             return True
 
     def export_coreml(
@@ -250,22 +235,13 @@ class ModelExporter:
         output_path: str,
         input_shape: Tuple[int, int, int] = (3, 256, 256)
     ):
-        """Export to CoreML for Apple Silicon"""
-        try:
-            import coremltools as ct
-        except ImportError:
-            print("coremltools not available. Install with: pip install coremltools")
-            return
 
         print(f"Exporting to CoreML: {output_path}")
 
-        # Create example input
         example_input = torch.randn(1, *input_shape).to(self.device)
 
-        # Trace model
         traced_model = torch.jit.trace(self.model, example_input)
 
-        # Convert to CoreML
         mlmodel = ct.convert(
             traced_model,
             inputs=[ct.TensorType(name="input", shape=(1, *input_shape))],
@@ -273,7 +249,6 @@ class ModelExporter:
             compute_precision=ct.precision.FLOAT16
         )
 
-        # Save
         mlmodel.save(output_path)
         print(f"CoreML model saved: {output_path}")
 
@@ -286,13 +261,6 @@ class ModelExporter:
         fp16: bool = True,
         int8: bool = False
     ):
-        """Export to TensorRT engine for NVIDIA GPUs"""
-        try:
-            import tensorrt as trt
-        except ImportError:
-            print("TensorRT not available. Install NVIDIA TensorRT first.")
-            return
-
         print(f"Building TensorRT engine: {output_path}")
 
         TRT_LOGGER = trt.Logger(trt.Logger.INFO)
@@ -300,14 +268,12 @@ class ModelExporter:
         network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
         parser = trt.OnnxParser(network, TRT_LOGGER)
 
-        # Parse ONNX
         with open(onnx_path, 'rb') as f:
             if not parser.parse(f.read()):
                 for error in range(parser.num_errors):
                     print(parser.get_error(error))
                 raise RuntimeError("Failed to parse ONNX")
 
-        # Build engine
         config = builder.create_builder_config()
 
         if fp16 and builder.platform_has_fast_fp16:
@@ -318,16 +284,13 @@ class ModelExporter:
             config.set_flag(trt.BuilderFlag.INT8)
             print("Enabled INT8 precision")
 
-        # Set memory pool limits
         config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 1 << 30)  # 1GB
 
-        # Build serialized engine
         serialized_engine = builder.build_serialized_network(network, config)
 
         if serialized_engine is None:
             raise RuntimeError("Failed to build TensorRT engine")
 
-        # Save
         with open(output_path, 'wb') as f:
             f.write(serialized_engine)
 
@@ -379,11 +342,9 @@ def load_model_for_export(
     print(f"  Path: {model_path}")
     print(f"  Scale: {scale}")
 
-    # Always load to CPU first, but don't test
     print("  Using CPU for loading")
 
     try:
-        # Create model on CPU
         print("  Creating model architecture...")
         model = realplksr(
             in_ch=3,
@@ -400,25 +361,21 @@ def load_model_for_export(
         )
         print("  ✓ Model created")
 
-        # Load checkpoint
         print("  Loading checkpoint...")
         checkpoint = torch.load(model_path, map_location='cpu')
         print("  ✓ Checkpoint loaded")
 
-        # Extract state dict
         if 'params' in checkpoint:
             state_dict = checkpoint['params']
         else:
             state_dict = checkpoint
 
-        # Clean state dict
         new_state_dict = {}
         for k, v in state_dict.items():
             if k.startswith('module.'):
                 k = k[7:]
             new_state_dict[k] = v
 
-        # Load weights
         missing, unexpected = model.load_state_dict(new_state_dict, strict=False)
         print(f"  Missing keys: {len(missing)}")
         print(f"  Unexpected keys: {len(unexpected)}")
@@ -426,18 +383,15 @@ def load_model_for_export(
         if len(missing) == 0 and len(unexpected) == 0:
             print("  ✅ All weights loaded successfully!")
 
-        # Set to eval mode but stay on CPU
         model.eval()
         print("  ✓ Model ready for export on CPU")
 
-        # SKIP the forward pass test - we know it works on GPU
         print("  ⏭️  Skipping forward pass test (trusting weights)")
 
         return model
 
     except Exception as e:
         print(f"\n❌ Error in load_model_for_export: {e}")
-        import traceback
         traceback.print_exc()
         raise
 
@@ -458,7 +412,6 @@ def main():
                        choices=['cuda', 'mps', 'cpu'],
                        help='Device for export')
 
-    # Export formats
     parser.add_argument('--onnx', action='store_true',
                        help='Export to ONNX')
     parser.add_argument('--fp16', action='store_true',
@@ -470,7 +423,6 @@ def main():
     parser.add_argument('--tensorrt', action='store_true',
                        help='Build TensorRT engine')
 
-    # ONNX options
     parser.add_argument('--opset', type=int, default=14,
                        help='ONNX opset version')
     parser.add_argument('--static-shapes', action='store_true',
@@ -478,7 +430,6 @@ def main():
     parser.add_argument('--input-size', type=int, nargs=2, default=[256, 256],
                        help='Input height width for static export')
 
-    # Model metadata
     parser.add_argument('--dataset', type=str, default='nomosv2',
                        help='Training dataset name')
     parser.add_argument('--iterations', type=int, default=185000,
@@ -492,11 +443,9 @@ def main():
 
     args = parser.parse_args()
 
-    # Create output directory
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load model
     model = load_model_for_export(
         args.model,
         args.model_type,
@@ -504,19 +453,15 @@ def main():
         args.device
     )
 
-    # Create exporter
     exporter = ModelExporter(
         model,
         model_name=f"{args.model_type}_{args.scale}x",
         device=args.device
     )
 
-    # Track exported formats
     exported_formats = []
 
-    # Export to ONNX
     if args.onnx:
-        # Determine input shape
         if args.static_shapes:
             input_shape = (1, 3, args.input_size[0], args.input_size[1])
             dynamic_axes = False
@@ -524,9 +469,8 @@ def main():
             input_shape = (1, 3, 256, 256)
             dynamic_axes = True
 
-        # Export
         onnx_path = output_dir / f"{args.model_type}_{args.scale}x.onnx"
-        onnx_model = exporter.export_onnx(
+        exporter.export_onnx(
             str(onnx_path),
             input_shape=input_shape,
             dynamic_axes=dynamic_axes,
@@ -534,28 +478,23 @@ def main():
         )
         exported_formats.append("ONNX")
 
-        # Validate
         exporter.validate_onnx(str(onnx_path), input_shape)
 
-        # Convert to FP16
         if args.fp16:
             fp16_path = output_dir / f"{args.model_type}_{args.scale}x_fp16.onnx"
             exporter.convert_to_fp16(str(onnx_path), str(fp16_path))
             exported_formats.append("ONNX-FP16")
 
-        # Convert to INT8
         if args.int8:
             int8_path = output_dir / f"{args.model_type}_{args.scale}x_int8.onnx"
             exporter.convert_to_int8(str(onnx_path), str(int8_path))
             exported_formats.append("ONNX-INT8")
 
-    # Export to CoreML
     if args.coreml:
         coreml_path = output_dir / f"{args.model_type}_{args.scale}x.mlpackage"
         exporter.export_coreml(str(coreml_path))
         exported_formats.append("CoreML")
 
-    # Build TensorRT engine
     if args.tensorrt:
         if not args.onnx:
             print("TensorRT export requires ONNX export first")
@@ -569,7 +508,6 @@ def main():
             )
             exported_formats.append("TensorRT")
 
-    # Create model card
     model_params = sum(p.numel() for p in model.parameters())
 
     exporter.create_model_card(args.output_dir, {

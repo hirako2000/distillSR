@@ -6,6 +6,7 @@ Handles 4K/8K images with memory-efficient tiling strategy
 import argparse
 import sys
 import time
+import types
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -16,6 +17,7 @@ import torch.nn.functional as F
 from torch import nn
 
 sys.path.append(str(Path(__file__).parent))
+import traceback
 
 from archs.realplksr import realplksr, realplksr_l, realplksr_s
 
@@ -202,10 +204,6 @@ class InferenceEngine:
         scale: int,
         dysample: bool
     ) -> nn.Module:
-        import traceback
-
-        from archs.realplksr import realplksr
-
         checkpoint = torch.load(model_path, map_location='cpu')
 
         if 'params' in checkpoint:
@@ -354,7 +352,6 @@ class InferenceEngine:
                     traceback.print_exc()
                     raise
 
-            import types
             model.to_img.forward = types.MethodType(mps_safe_forward, model.to_img)
             print("  ✅ DySample patched with original working implementation")
 
@@ -381,9 +378,6 @@ class InferenceEngine:
         model_type: str,
         scale: int
     ) -> nn.Module:
-        import traceback
-
-        from archs.realplksr import realplksr
 
         checkpoint = torch.load(model_path, map_location='cpu')
 

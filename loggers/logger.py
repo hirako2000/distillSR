@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 import torch
+import wandb
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,7 +40,6 @@ class ExperimentLogger:
 
         if use_wandb:
             try:
-                import wandb
                 self.wandb = wandb
 
                 wandb.init(
@@ -52,10 +52,6 @@ class ExperimentLogger:
                     dir=str(self.log_dir)
                 )
                 logger.info(f"Initialized W&B run: {wandb.run.name}")
-
-            except ImportError:
-                logger.warning("wandb not installed, falling back to local logging")
-                self.use_wandb = False
             except Exception as e:
                 logger.warning(f"Failed to initialize W&B: {e}")
                 self.use_wandb = False

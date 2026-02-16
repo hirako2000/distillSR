@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
 import torch
+from torch.nn import Module
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class CheckpointManager:
             if best_metric:
                 logger.info(f"Best model saved (metric: {best_metric:.4f})")
 
-    def load(self, path: str, model: nn.Module, optimizer: Optional[torch.optim.Optimizer] = None, scheduler: Optional = None, strict: bool = False) -> Dict[str, Any]:
+    def load(self, path: str, model: Module, optimizer: Optional[torch.optim.Optimizer] = None, scheduler: Optional = None, strict: bool = False) -> Dict[str, Any]:
         checkpoint = torch.load(path, map_location='cpu')
 
         if 'model' in checkpoint:

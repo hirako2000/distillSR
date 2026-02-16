@@ -2,6 +2,7 @@
 import json
 import platform
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -139,7 +140,6 @@ def test_model_benchmark(
     print(f"Python: {platform.python_version()}")
     print(f"System: {platform.system()} {platform.release()}")
 
-    # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
 
     results = {
@@ -154,20 +154,15 @@ def test_model_benchmark(
         'images': []
     }
 
-    # Test each image
     for img_path in test_images:
         print(f"\n📸 Processing: {img_path.name}")
 
-        # Create output path
         out_path = tmp_path / f"out_{img_path.name}"
         final_path = output_dir / f"{img_path.stem}_sr{img_path.suffix}"
 
-        # Run inference
         result = run_cli_inference(model_path, img_path, out_path)
 
         if result['success'] and result['output_path']:
-            # Copy to final location
-            import shutil
             shutil.copy2(result['output_path'], final_path)
 
             results['images'].append({

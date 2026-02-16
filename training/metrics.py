@@ -8,7 +8,9 @@ import math
 from typing import Union
 
 import cv2
+import lpips
 import numpy as np
+import piq
 import torch
 from skimage.metrics import structural_similarity as ssim_skimage
 
@@ -129,10 +131,6 @@ class Metrics:
             img1, img2: Input tensors [B, C, H, W] in [-1, 1] range
             net: Backbone network ('alex', 'vgg', 'squeeze')
         """
-        try:
-            import lpips
-        except ImportError:
-            raise ImportError("Please install lpips: pip install lpips")
 
         # Initialize LPIPS model if not already done
         if not hasattr(Metrics, '_lpips_model'):
@@ -164,11 +162,6 @@ class Metrics:
         Args:
             img: Input image [0, 255] range
         """
-        try:
-            import piq
-        except ImportError:
-            raise ImportError("Please install piq: pip install piq")
-
         if isinstance(img, torch.Tensor):
             img = img.detach().cpu().numpy()
 
