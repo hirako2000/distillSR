@@ -12,6 +12,8 @@ A super-resolution training and inference pipeline implementing second-order deg
 - **LMDB Storage Layer** - High-throughput patch storage with lazy loading and validation
 - **MPS Optimization** - Metal Performance Shaders compatibility & optimisations
 
+
+Further doc on how it all works [here](./docs/index.md).
 ## Quick Start
 
 ```bash
@@ -56,44 +58,41 @@ The medallion architecture transforms raw imagery into training ready patches th
 ### Bronze
 
 Raw ingestion from Hugging Face Hub with parallel downloading and image verification. No filtering preserves source integrity.
-[Read more about Bronze ingestion](./bronze-ingestion.md)
 
-![Medallion Architecture](docs/images/medallion_architecture.png)
+![Medallion Architecture](./docs/images/medallion_architecture.png)
 
 Ingested viz
 
-![Bronze Layer Analysis](docs/images/bronze_layer_analysis.png)
+![Bronze Layer Analysis](./docs/images/bronze_layer_analysis.png)
 
 ### Silver
 
 Validation filters images below 1024 pixels, segments into 256×256 patches, and stores in LMDB with PNG compression. Keys follow dataset/relative_path_row_column pattern with metadata tracking.
-[Read more about transformation](./silver-transformation.md)
 
 **Silver Tier** validates images, discarding invalid images. Valid images are segmented into 2 patches and stored in LMDB databases with compression. Each patch is indexed with dataset-relative path coordinates for zero-copy access during training.
 
 Patch grid:
 
-![Silver Patches Grid](docs/images/silver_patches_grid.png)
+![Silver Patches Grid](./docs/images/silver_patches_grid.png)
 
 Analysis: 
 
-![Silver Analysis](docs/images/silver_analysis.png)
+![Silver Analysis](./docs/images/silver_analysis.png)
 
 ### Gold
 
 On-the-fly second-order degradation applies during training. Each iteration sees unique degradation parameters, creating an infinite dataset variant.
-[Read more about degradation](./gold-degradation.md)
 
 Degraded low-resolution is on-the-fly through second-order stochastic degradation. Each training iteration sees unique degradation parameters replicating various types of image damage.
 
-![Gold Degradation Showcase](docs/images/gold_degradation_showcase.png)
+![Gold Degradation Showcase](./docs/images/gold_degradation_showcase.png)
 
 Random blur selection from isotropic Gaussian, anisotropic Gaussian, generalized Gaussian, and plateau kernels. Gaussian or Poisson noise injects sensor artifacts. Multi-interpolation resizing with five methods simulates downsampling. JPEG compression with chroma subsampling replicates encoding artifacts. A second pass adds sinc filtering for ringing, additional blur, final downsampling to target scale, and lower-quality JPEG compression for re-upload damage.
 
-![Degradation Types](docs/images/gold_degradation_stages.png)
+![Degradation Types](./docs/images/gold_degradation_stages.png)
 
 Pairs:
-![Sample Pairs](docs/images/sample_pairs.png)
+![Sample Pairs](./docs/images/sample_pairs.png)
 
 ## Architecture
 
@@ -105,8 +104,6 @@ The neural network applies large convolutions channel-wise rather than through k
 - **Element-wise Attention** - Sigmoid-gated modulation after large kernel convolution
 - **Group Normalization** - Four groups per block with constant initialization
 - **DySample** - Content-aware upsampling with MPS compatibility patches
-
-[Read more about architecture](./architecture.md)
 
 ## Training
 
@@ -126,7 +123,8 @@ During training, the model learns to reverse this degradation through multiple l
 - Cosine annealing to 1e-7 over total iterations
 - Gradient clipping at 1.0
 - Mixed precision training with GradScaler (CUDA only)
-[Read more about training](./training.md)
+
+[Read more about training](./docs/training.md)
 
 ## Inference
 
@@ -141,13 +139,12 @@ Tiled inference processes arbitrary image sizes with configurable halo for conte
 
 Trained models deploy through tiled inference with configurable halo context, processing arbitrarily large images within memory constraints. Export to ONNX, FP16, INT8, CoreML, and TensorRT formats enables cross-platform deployment from Apple Silicon to NVIDIA GPUs.
 
-![Inference Benchmark](docs/images/inference_benchmark.png)
+![Inference Benchmark](./docs/images/inference_benchmark.png)
 
 - Image get processed in 2-4 seconds on a consumer GPU
 - 4K image supported with efficient VRAM utilization, tiled automatically within memory constraints
 - Benchmark mode for throughput measurement
 
-[Read more about inference](./inference-tiling.md)
 
 ## Export
 
