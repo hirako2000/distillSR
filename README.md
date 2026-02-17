@@ -3,6 +3,8 @@
 
 A super-resolution training and inference pipeline implementing second-order degradation for image restoration. Built for cross-platform deployment: Apple Silicon and NVIDIA GPUs.
 
+![example](./docs/images/example.jpg)
+
 ## Features
 
 - **Degradation Pipeline** - Multi-pass stochastic degradation simulating image damage through blur, noise, resizing, sinc filtering, and JPEG compression
@@ -14,7 +16,11 @@ A super-resolution training and inference pipeline implementing second-order deg
 
 
 Further doc on how it all works [here](./docs/index.md).
+
+
 ## Quick Start
+
+There is a browser based demo [here](https://upscaler.renderlab.cc)
 
 ```bash
 # Clone
